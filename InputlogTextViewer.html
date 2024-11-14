@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inputlog Text Viewer</title>
+    <style>
+        body {
+          font-family: Arial, sans-serif;
+          margin: 20px;
+          background-color: #f0f4f8;
+        }
+        .output {
+          margin-top: 20px;
+          padding: 10px;
+          border: 1px solid #ccc;
+          background-color: white;
+          white-space: pre-wrap;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+        }
+        .drop-zone {
+          border: 2px dashed #ccc;
+          padding: 20px;
+          text-align: center;
+          margin-top: 20px;
+          background-color: #e8f0fe;
+          cursor: pointer;
+        }
+        .drop-zone.drag-over {
+          background-color: #d1e7fe;
+        }
+    </style>
+</head>
+<body>
+
+<input type="file" id="fileInput" accept=".zip" onchange="processZipFile()" style="display: none;">
+
+<div class="drop-zone" id="dropZone">
+    Drag and drop an input log .zip file here or click to select
+</div>
+
+<div class="output" id="output"></div>
+
+<script>
+    function handleFile(file) {
+      processZipFile(file);
+    }
+
+    async function processZipFile(file = null) {
+      const fileInput = document.getElementById('fileInput');
+      const output = document.getElementById('output');
+
+      if (!file && fileInput.files.length === 0) {
+        output.textContent = 'Please select a .zip file first!';
+        return;
+      }
+
+      file = file || fileInput.files[0];
+
+      if (file.name.slice(-4).toLowerCase() !== '.zip' || !file.name.includes('input_log-')) {
+        output.textContent = 'Please upload a valid input log .zip file! The file name should be something like "input_log-1.zip".';
+        return;
+      }
+
+      try {
+        const zip = new JSZip();
+        const zipContent = await zip.loadAsync(file);
+        const logFile = Object.keys(zipContent.files).find(name => name.includes('input_log-'));
+
+        if (logFile) {
+          const logText = await zip.file(logFile).async('text');
+          const lines = logText.split('\n');
+          let processedOutput = '';
+          let prevChar = '';
+          let count = 0;
+
+          lines.forEach(line => {
+            const index = line.indexOf('typed');
+            if (index !== -1 && line.length > index + 6) {
+              let charTyped = line[index + 6];
+
+              // Ignoring control characters
+              if (charTyped.charCodeAt(0) >= 32) {
+                if (charTyped === prevChar) {
+                  count++;
+                } else {
+                  if (prevChar.trim() === '') {
+                    processedOutput += prevChar;
+                  } else if (count >= 6) {
+                    processedOutput += `${prevChar}...${prevChar}`;
+                  } else {
+                    processedOutput += prevChar.repeat(count);
+                  }
+                  prevChar = charTyped;
+                  count = 1;
+                }
+              }
+            }
+          });
+
+          if (prevChar.trim() === '') {
+            processedOutput += prevChar;
+          } else if (count >= 6) {
+            processedOutput += `${prevChar}...${prevChar}`;
+          } else {
+            processedOutput += prevChar.repeat(count);
+          }
+
+          output.textContent = processedOutput;
+        } else {
+          output.textContent = 'No file with name containing "input_log-" found in the zip.';
+        }
+      } catch (error) {
+        output.textContent = 'An error occurred while processing the zip file.';
+      }
+    }
+
+    // Handle drag and drop events
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      dropZone.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('drag-over');
+    });
+
+    dropZone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const file = event.dataTransfer.files[0];
+      if (file)
+        handleFile(file);
+    });
+
+    dropZone.addEventListener('click', () => {
+      document.getElementById('fileInput').click();
+    });
+</script>
+
+<!-- JSZip library for handling zip files -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</body>
+</html>
